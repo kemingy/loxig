@@ -1,4 +1,5 @@
 const std = @import("std");
+const Scan = @import("scan.zig");
 
 pub fn main() !void {
     const args = try std.process.argsAlloc(std.heap.page_allocator);
@@ -21,7 +22,7 @@ pub fn main() !void {
     defer std.heap.page_allocator.free(file_contents);
 
     if (file_contents.len > 0) {
-        @panic("Scanner not implemented");
+        try Scan.scan(file_contents);
     } else {
         try std.io.getStdOut().writer().print("EOF  null\n", .{}); // Placeholder, remove this line when implementing the scanner
     }
