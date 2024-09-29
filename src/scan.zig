@@ -33,7 +33,7 @@ const TokenType = enum {
     NUMBER,
 
     // keywords
-    ADD,
+    AND,
     CLASS,
     ELSE,
     FALSE,
@@ -52,7 +52,7 @@ const TokenType = enum {
 };
 
 const reserved_keywords = std.StaticStringMap(TokenType).initComptime(.{
-    .{"add", TokenType.ADD},
+    .{"and", TokenType.AND},
     .{"class", TokenType.CLASS},
     .{"else", TokenType.ELSE},
     .{"false", TokenType.FALSE},
