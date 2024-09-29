@@ -52,22 +52,22 @@ const TokenType = enum {
 };
 
 const reserved_keywords = std.StaticStringMap(TokenType).initComptime(.{
-    .{"and", TokenType.AND},
-    .{"class", TokenType.CLASS},
-    .{"else", TokenType.ELSE},
-    .{"false", TokenType.FALSE},
-    .{"fun", TokenType.FUN},
-    .{"for", TokenType.FOR},
-    .{"if", TokenType.IF},
-    .{"nil", TokenType.NIL},
-    .{"or", TokenType.OR},
-    .{"print", TokenType.PRINT},
-    .{"return", TokenType.RETURN},
-    .{"super", TokenType.SUPER},
-    .{"this", TokenType.THIS},
-    .{"true", TokenType.TRUE},
-    .{"var", TokenType.VAR},
-    .{"while", TokenType.WHILE},
+    .{ "and", TokenType.AND },
+    .{ "class", TokenType.CLASS },
+    .{ "else", TokenType.ELSE },
+    .{ "false", TokenType.FALSE },
+    .{ "fun", TokenType.FUN },
+    .{ "for", TokenType.FOR },
+    .{ "if", TokenType.IF },
+    .{ "nil", TokenType.NIL },
+    .{ "or", TokenType.OR },
+    .{ "print", TokenType.PRINT },
+    .{ "return", TokenType.RETURN },
+    .{ "super", TokenType.SUPER },
+    .{ "this", TokenType.THIS },
+    .{ "true", TokenType.TRUE },
+    .{ "var", TokenType.VAR },
+    .{ "while", TokenType.WHILE },
 });
 
 const Lexeme = union(enum) {
@@ -87,12 +87,20 @@ const Lexeme = union(enum) {
         switch (self) {
             Lexeme.string => return self.string,
             Lexeme.number => {
-                var num = try std.fmt.allocPrint(allocator, "{d}", .{self.number});
+                var num = try std.fmt.allocPrint(
+                    allocator,
+                    "{d}",
+                    .{self.number},
+                );
                 if (std.mem.count(u8, num, ".") == 0) {
-                    num = try std.fmt.allocPrint(allocator, "{s}.0", .{num});
+                    num = try std.fmt.allocPrint(
+                        allocator,
+                        "{s}.0",
+                        .{num},
+                    );
                 }
                 return num;
-            }
+            },
         }
     }
 };
@@ -115,7 +123,11 @@ const Token = struct {
     pub fn to_string(self: Token, allocator: std.mem.Allocator) ![]u8 {
         return std.fmt.allocPrint(allocator, "{s} {s} {s}", .{
             @tagName(self.token_type),
-            if (self.token_type == TokenType.STRING) try std.fmt.allocPrint(allocator, "\"{s}\"", .{self.literal}) else self.literal,
+            if (self.token_type == TokenType.STRING) try std.fmt.allocPrint(
+                allocator,
+                "\"{s}\"",
+                .{self.literal},
+            ) else self.literal,
             if (self.lexeme) |lexeme| try lexeme.to_string(allocator) else "null",
         });
     }
@@ -185,7 +197,12 @@ const Scanner = struct {
             return;
         }
         _ = self.advance();
-        try tokens.append(Token.init(TokenType.STRING, Lexeme.build_string(self.content[self.start + 1 .. self.current - 1]), self.content[self.start + 1 .. self.current - 1], self.line));
+        try tokens.append(Token.init(
+            TokenType.STRING,
+            Lexeme.build_string(self.content[self.start + 1 .. self.current - 1]),
+            self.content[self.start + 1 .. self.current - 1],
+            self.line,
+        ));
     }
 
     fn number(self: *Scanner, tokens: *std.ArrayList(Token)) !void {
@@ -199,7 +216,12 @@ const Scanner = struct {
                 _ = self.advance();
             }
         }
-        try tokens.append(Token.init(TokenType.NUMBER, try Lexeme.build_number(self.content[self.start..self.current]), self.content[self.start..self.current], self.line));
+        try tokens.append(Token.init(
+            TokenType.NUMBER,
+            try Lexeme.build_number(self.content[self.start..self.current]),
+            self.content[self.start..self.current],
+            self.line,
+        ));
     }
 
     fn identifier(self: *Scanner, tokens: *std.ArrayList(Token)) !void {
@@ -208,7 +230,12 @@ const Scanner = struct {
         }
         const kw = reserved_keywords.get(self.content[self.start..self.current]);
         const token_type = if (kw) |t| t else TokenType.IDENTIFIER;
-        try tokens.append(Token.init(token_type, null, self.content[self.start..self.current], self.line));
+        try tokens.append(Token.init(
+            token_type,
+            null,
+            self.content[self.start..self.current],
+            self.line,
+        ));
     }
 
     fn has_error(self: *Scanner) bool {
@@ -216,7 +243,12 @@ const Scanner = struct {
     }
 
     fn add_token(self: *Scanner, tokens: *std.ArrayList(Token), token_type: TokenType) !void {
-        try tokens.append(Token.init(token_type, null, self.content[self.start..self.current], self.line));
+        try tokens.append(Token.init(
+            token_type,
+            null,
+            self.content[self.start..self.current],
+            self.line,
+        ));
     }
 
     fn scan_token(self: *Scanner, tokens: *std.ArrayList(Token)) !void {

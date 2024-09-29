@@ -18,7 +18,11 @@ pub fn main() !void {
         std.process.exit(1);
     }
 
-    const file_contents = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, filename, std.math.maxInt(usize));
+    const file_contents = try std.fs.cwd().readFileAlloc(
+        std.heap.page_allocator,
+        filename,
+        std.math.maxInt(usize),
+    );
     defer std.heap.page_allocator.free(file_contents);
 
     if (file_contents.len > 0) {
