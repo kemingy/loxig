@@ -1,4 +1,5 @@
 const std = @import("std");
+const Report = @import("report.zig");
 
 const TokenType = enum {
     EOF,
@@ -66,10 +67,9 @@ const Token = struct {
     }
 
     pub fn to_string(self: Token, allocator: std.mem.Allocator) ![]u8 {
-        return std.fmt.allocPrint(allocator,
-            "{s} {s} null", .{
-                @tagName(self.token_type),
-                self.literal,
+        return std.fmt.allocPrint(allocator, "{s} {s} null", .{
+            @tagName(self.token_type),
+            self.literal,
         });
     }
 };
@@ -96,12 +96,17 @@ const Scanner = struct {
         return self.content[self.current - 1];
     }
 
+    fn has_error(self: *Scanner) bool {
+        return self.has_error;
+    }
+
     fn add_token(self: *Scanner, tokens: *std.ArrayList(Token), token_type: TokenType) !void {
         try tokens.append(Token.init(token_type, null, self.content[self.start..self.current], self.line));
     }
 
     fn scan_token(self: *Scanner, tokens: *std.ArrayList(Token)) !void {
         switch (self.advance()) {
+            '\n' => self.line += 1,
             '(' => try self.add_token(tokens, TokenType.LEFT_PAREN),
             ')' => try self.add_token(tokens, TokenType.RIGHT_PAREN),
             '{' => try self.add_token(tokens, TokenType.LEFT_BRACE),
@@ -112,8 +117,11 @@ const Scanner = struct {
             '+' => try self.add_token(tokens, TokenType.PLUS),
             ';' => try self.add_token(tokens, TokenType.SEMICOLON),
             '*' => try self.add_token(tokens, TokenType.STAR),
-            else => {
-                std.debug.print("Unexpected character at line: {}\n", .{self.line});
+            else => |char| {
+                try Report.err("[line {d}] Error: Unexpected character: {c}\n", .{
+                    self.line,
+                    char,
+                });
                 self.has_error = true;
             },
         }
@@ -139,7 +147,10 @@ pub fn scan(content: []const u8) !void {
     for (tokens.items) |token| {
         const token_str = try token.to_string(std.heap.page_allocator);
         defer std.heap.page_allocator.free(token_str);
-        const stdout = std.io.getStdOut().writer();
-        try stdout.print("{s}\n", .{token_str});
+        try Report.print("{s}\n", .{token_str});
+    }
+
+    if (scanner.has_error) {
+        std.process.exit(65);
     }
 }
