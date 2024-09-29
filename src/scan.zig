@@ -103,6 +103,11 @@ const Scanner = struct {
         return true;
     }
 
+    fn peek(self: *Scanner) u8 {
+        if (self.is_eof()) return @as(u8, 0);
+        return self.content[self.current];
+    }
+
     fn has_error(self: *Scanner) bool {
         return self.has_error;
     }
@@ -114,6 +119,7 @@ const Scanner = struct {
     fn scan_token(self: *Scanner, tokens: *std.ArrayList(Token)) !void {
         switch (self.advance()) {
             '\n' => self.line += 1,
+            ' ', '\r', '\t' => {},
             '(' => try self.add_token(tokens, TokenType.LEFT_PAREN),
             ')' => try self.add_token(tokens, TokenType.RIGHT_PAREN),
             '{' => try self.add_token(tokens, TokenType.LEFT_BRACE),
@@ -124,10 +130,31 @@ const Scanner = struct {
             '+' => try self.add_token(tokens, TokenType.PLUS),
             ';' => try self.add_token(tokens, TokenType.SEMICOLON),
             '*' => try self.add_token(tokens, TokenType.STAR),
-            '!' => try self.add_token(tokens, if (self.match('=')) TokenType.BANG_EQUAL else TokenType.BANG),
-            '=' => try self.add_token(tokens, if (self.match('=')) TokenType.EQUAL_EQUAL else TokenType.EQUAL),
-            '<' => try self.add_token(tokens, if (self.match('=')) TokenType.LESS_EQUAL else TokenType.LESS),
-            '>' => try self.add_token(tokens, if (self.match('=')) TokenType.GREATER_EQUAL else TokenType.GREATER),
+            '!' => {
+                const token_type = if (self.match('=')) TokenType.BANG_EQUAL else TokenType.BANG;
+                try self.add_token(tokens, token_type);
+            },
+            '=' => {
+                const token_type = if (self.match('=')) TokenType.EQUAL_EQUAL else TokenType.EQUAL;
+                try self.add_token(tokens, token_type);
+            },
+            '<' => {
+                const token_type = if (self.match('=')) TokenType.LESS_EQUAL else TokenType.LESS;
+                try self.add_token(tokens, token_type);
+            },
+            '>' => {
+                const token_type = if (self.match('=')) TokenType.GREATER_EQUAL else TokenType.GREATER;
+                try self.add_token(tokens, token_type);
+            },
+            '/' => {
+                if (self.match('/')) {
+                    while (self.peek() != '\n' and !self.is_eof()) {
+                        _ = self.advance();
+                    }
+                } else {
+                    try self.add_token(tokens, TokenType.SLASH);
+                }
+            },
             else => |char| {
                 try Report.err("[line {d}] Error: Unexpected character: {c}\n", .{
                     self.line,
