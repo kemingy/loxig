@@ -96,6 +96,13 @@ const Scanner = struct {
         return self.content[self.current - 1];
     }
 
+    fn match(self: *Scanner, expected: u8) bool {
+        if (self.is_eof()) return false;
+        if (self.content[self.current] != expected) return false;
+        self.current += 1;
+        return true;
+    }
+
     fn has_error(self: *Scanner) bool {
         return self.has_error;
     }
@@ -117,6 +124,10 @@ const Scanner = struct {
             '+' => try self.add_token(tokens, TokenType.PLUS),
             ';' => try self.add_token(tokens, TokenType.SEMICOLON),
             '*' => try self.add_token(tokens, TokenType.STAR),
+            '!' => try self.add_token(tokens, if (self.match('=')) TokenType.BANG_EQUAL else TokenType.BANG),
+            '=' => try self.add_token(tokens, if (self.match('=')) TokenType.EQUAL_EQUAL else TokenType.EQUAL),
+            '<' => try self.add_token(tokens, if (self.match('=')) TokenType.LESS_EQUAL else TokenType.LESS),
+            '>' => try self.add_token(tokens, if (self.match('=')) TokenType.GREATER_EQUAL else TokenType.GREATER),
             else => |char| {
                 try Report.err("[line {d}] Error: Unexpected character: {c}\n", .{
                     self.line,
