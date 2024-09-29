@@ -51,13 +51,40 @@ const TokenType = enum {
     WHILE,
 };
 
+const Lexeme = union(enum) {
+    string: []const u8,
+    number: f64,
+
+    pub fn build_string(string: []const u8) Lexeme {
+        return Lexeme{ .string = string };
+    }
+
+    pub fn build_number(string: []const u8) !Lexeme {
+        const number: f64 = try std.fmt.parseFloat(f64, string);
+        return Lexeme{ .number = number };
+    }
+
+    pub fn to_string(self: Lexeme, allocator: std.mem.Allocator) ![]const u8 {
+        switch (self) {
+            Lexeme.string => return self.string,
+            Lexeme.number => {
+                var num = try std.fmt.allocPrint(allocator, "{d}", .{self.number});
+                if (std.mem.count(u8, num, ".") == 0) {
+                    num = try std.fmt.allocPrint(allocator, "{s}.0", .{num});
+                }
+                return num;
+            }
+        }
+    }
+};
+
 const Token = struct {
     token_type: TokenType,
-    lexeme: ?[]const u8,
+    lexeme: ?Lexeme,
     literal: []const u8,
     line: u32,
 
-    pub fn init(token_type: TokenType, lexeme: ?[]const u8, literal: []const u8, line: u32) Token {
+    pub fn init(token_type: TokenType, lexeme: ?Lexeme, literal: []const u8, line: u32) Token {
         return Token{
             .token_type = token_type,
             .lexeme = lexeme,
@@ -67,12 +94,10 @@ const Token = struct {
     }
 
     pub fn to_string(self: Token, allocator: std.mem.Allocator) ![]u8 {
-        const literal = if (self.token_type == TokenType.STRING) try std.fmt.allocPrint(allocator, "\"{s}\"", .{self.literal}) else self.literal;
-        const lexeme = self.lexeme orelse "null";
         return std.fmt.allocPrint(allocator, "{s} {s} {s}", .{
             @tagName(self.token_type),
-            literal,
-            lexeme,
+            if (self.token_type == TokenType.STRING) try std.fmt.allocPrint(allocator, "\"{s}\"", .{self.literal}) else self.literal,
+            if (self.lexeme) |lexeme| try lexeme.to_string(allocator) else "null",
         });
     }
 };
@@ -112,7 +137,6 @@ const Scanner = struct {
     }
 
     fn peek_next(self: *Scanner) u8 {
-        if (self.is_eof()) return @as(u8, 0);
         if (self.current + 1 >= self.content.len) return @as(u8, 0);
         return self.content[self.current + 1];
     }
@@ -134,7 +158,7 @@ const Scanner = struct {
             return;
         }
         _ = self.advance();
-        try tokens.append(Token.init(TokenType.STRING, self.content[self.start + 1 .. self.current - 1], self.content[self.start + 1 .. self.current - 1], self.line));
+        try tokens.append(Token.init(TokenType.STRING, Lexeme.build_string(self.content[self.start + 1 .. self.current - 1]), self.content[self.start + 1 .. self.current - 1], self.line));
     }
 
     fn number(self: *Scanner, tokens: *std.ArrayList(Token)) !void {
@@ -148,7 +172,7 @@ const Scanner = struct {
                 _ = self.advance();
             }
         }
-        try tokens.append(Token.init(TokenType.NUMBER, null, self.content[self.start..self.current], self.line));
+        try tokens.append(Token.init(TokenType.NUMBER, try Lexeme.build_number(self.content[self.start..self.current]), self.content[self.start..self.current], self.line));
     }
 
     fn has_error(self: *Scanner) bool {
@@ -202,6 +226,7 @@ const Scanner = struct {
             else => |char| {
                 if (is_digit(char)) {
                     try self.number(tokens);
+                    return;
                 }
                 try Report.err("[line {d}] Error: Unexpected character: {c}\n", .{
                     self.line,
