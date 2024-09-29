@@ -111,6 +111,12 @@ const Scanner = struct {
         return self.content[self.current];
     }
 
+    fn peek_next(self: *Scanner) u8 {
+        if (self.is_eof()) return @as(u8, 0);
+        if (self.current + 1 >= self.content.len) return @as(u8, 0);
+        return self.content[self.current + 1];
+    }
+
     fn is_digit(char: u8) bool {
         return char >= '0' and char <= '9';
     }
@@ -129,6 +135,20 @@ const Scanner = struct {
         }
         _ = self.advance();
         try tokens.append(Token.init(TokenType.STRING, self.content[self.start + 1 .. self.current - 1], self.content[self.start + 1 .. self.current - 1], self.line));
+    }
+
+    fn number(self: *Scanner, tokens: *std.ArrayList(Token)) !void {
+        while (is_digit(self.peek())) {
+            _ = self.advance();
+        }
+        if (self.peek() == '.' and is_digit(self.peek_next())) {
+            // consume "."
+            _ = self.advance();
+            while (is_digit(self.peek())) {
+                _ = self.advance();
+            }
+        }
+        try tokens.append(Token.init(TokenType.NUMBER, null, self.content[self.start..self.current], self.line));
     }
 
     fn has_error(self: *Scanner) bool {
@@ -181,7 +201,7 @@ const Scanner = struct {
             '"' => try self.string(tokens),
             else => |char| {
                 if (is_digit(char)) {
-                    self.number(tokens);
+                    try self.number(tokens);
                 }
                 try Report.err("[line {d}] Error: Unexpected character: {c}\n", .{
                     self.line,
