@@ -67,9 +67,12 @@ const Token = struct {
     }
 
     pub fn to_string(self: Token, allocator: std.mem.Allocator) ![]u8 {
-        return std.fmt.allocPrint(allocator, "{s} {s} null", .{
+        const literal = if (self.token_type == TokenType.STRING) try std.fmt.allocPrint(allocator, "\"{s}\"", .{self.literal}) else self.literal;
+        const lexeme = self.lexeme orelse "null";
+        return std.fmt.allocPrint(allocator, "{s} {s} {s}", .{
             @tagName(self.token_type),
-            self.literal,
+            literal,
+            lexeme,
         });
     }
 };
@@ -106,6 +109,26 @@ const Scanner = struct {
     fn peek(self: *Scanner) u8 {
         if (self.is_eof()) return @as(u8, 0);
         return self.content[self.current];
+    }
+
+    fn is_digit(char: u8) bool {
+        return char >= '0' and char <= '9';
+    }
+
+    fn string(self: *Scanner, tokens: *std.ArrayList(Token)) !void {
+        while (self.peek() != '"' and !self.is_eof()) {
+            if (self.peek() == '\n') {
+                self.line += 1;
+            }
+            _ = self.advance();
+        }
+        if (self.is_eof()) {
+            try Report.err("[line {}] Error: Unterminated string.\n", .{self.line});
+            self.has_error = true;
+            return;
+        }
+        _ = self.advance();
+        try tokens.append(Token.init(TokenType.STRING, self.content[self.start + 1 .. self.current - 1], self.content[self.start + 1 .. self.current - 1], self.line));
     }
 
     fn has_error(self: *Scanner) bool {
@@ -155,7 +178,11 @@ const Scanner = struct {
                     try self.add_token(tokens, TokenType.SLASH);
                 }
             },
+            '"' => try self.string(tokens),
             else => |char| {
+                if (is_digit(char)) {
+                    self.number(tokens);
+                }
                 try Report.err("[line {d}] Error: Unexpected character: {c}\n", .{
                     self.line,
                     char,
