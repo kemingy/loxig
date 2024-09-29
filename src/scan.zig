@@ -51,6 +51,25 @@ const TokenType = enum {
     WHILE,
 };
 
+const reserved_keywords = std.StaticStringMap(TokenType).initComptime(.{
+    .{"add", TokenType.ADD},
+    .{"class", TokenType.CLASS},
+    .{"else", TokenType.ELSE},
+    .{"false", TokenType.FALSE},
+    .{"fun", TokenType.FUN},
+    .{"for", TokenType.FOR},
+    .{"if", TokenType.IF},
+    .{"nil", TokenType.NIL},
+    .{"or", TokenType.OR},
+    .{"print", TokenType.PRINT},
+    .{"return", TokenType.RETURN},
+    .{"super", TokenType.SUPER},
+    .{"this", TokenType.THIS},
+    .{"true", TokenType.TRUE},
+    .{"var", TokenType.VAR},
+    .{"while", TokenType.WHILE},
+});
+
 const Lexeme = union(enum) {
     string: []const u8,
     number: f64,
@@ -145,6 +164,14 @@ const Scanner = struct {
         return char >= '0' and char <= '9';
     }
 
+    fn is_alpha(char: u8) bool {
+        return (char >= 'a' and char <= 'z') or (char >= 'A' and char <= 'Z') or char == '_';
+    }
+
+    fn is_alpha_numeric(char: u8) bool {
+        return is_alpha(char) or is_digit(char);
+    }
+
     fn string(self: *Scanner, tokens: *std.ArrayList(Token)) !void {
         while (self.peek() != '"' and !self.is_eof()) {
             if (self.peek() == '\n') {
@@ -173,6 +200,15 @@ const Scanner = struct {
             }
         }
         try tokens.append(Token.init(TokenType.NUMBER, try Lexeme.build_number(self.content[self.start..self.current]), self.content[self.start..self.current], self.line));
+    }
+
+    fn identifier(self: *Scanner, tokens: *std.ArrayList(Token)) !void {
+        while (is_alpha_numeric(self.peek())) {
+            _ = self.advance();
+        }
+        const kw = reserved_keywords.get(self.content[self.start..self.current]);
+        const token_type = if (kw) |t| t else TokenType.IDENTIFIER;
+        try tokens.append(Token.init(token_type, null, self.content[self.start..self.current], self.line));
     }
 
     fn has_error(self: *Scanner) bool {
@@ -226,13 +262,15 @@ const Scanner = struct {
             else => |char| {
                 if (is_digit(char)) {
                     try self.number(tokens);
-                    return;
+                } else if (is_alpha(char)) {
+                    try self.identifier(tokens);
+                } else {
+                    try Report.err("[line {d}] Error: Unexpected character: {c}\n", .{
+                        self.line,
+                        char,
+                    });
+                    self.has_error = true;
                 }
-                try Report.err("[line {d}] Error: Unexpected character: {c}\n", .{
-                    self.line,
-                    char,
-                });
-                self.has_error = true;
             },
         }
     }
