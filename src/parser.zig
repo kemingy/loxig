@@ -85,6 +85,7 @@ const Parser = struct {
     fn consume(self: *Parser, token_type: TokenType, message: []const u8) ParseError!void {
         if (self.check_type(token_type)) {
             try self.advance();
+            return;
         }
         try Report.err(
             "[line {}] Error: {s}\n",
