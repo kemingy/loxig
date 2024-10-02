@@ -1,7 +1,7 @@
 const std = @import("std");
 const Report = @import("report.zig");
 
-const TokenType = enum {
+pub const TokenType = enum {
     EOF,
 
     // single-character tokens
@@ -49,6 +49,15 @@ const TokenType = enum {
     TRUE,
     VAR,
     WHILE,
+
+    pub fn format(
+        self: TokenType,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        return writer.print("{s}", .{@tagName(self)});
+    }
 };
 
 const reserved_keywords = std.StaticStringMap(TokenType).initComptime(.{
@@ -70,11 +79,27 @@ const reserved_keywords = std.StaticStringMap(TokenType).initComptime(.{
     .{ "while", TokenType.WHILE },
 });
 
-const Lexeme = union(enum) {
+pub fn number_contain_dot(number: f64) !bool {
+    var buf: [64]u8 = undefined;
+    var stream = std.io.fixedBufferStream(&buf);
+    try std.fmt.format(stream.writer(), "{d}", .{number});
+    return std.mem.count(u8, stream.getWritten(), ".") != 0;
+}
+
+pub const Lexeme = union(enum) {
     string: []const u8,
     number: f64,
+    boolean: bool,
+    nullptr: void,
 
-    pub fn build_string(string: []const u8) Lexeme {
+    pub fn build_null() Lexeme {
+        return Lexeme{ .nullptr = {} };
+    }
+
+    pub fn build_string(string: []const u8) !Lexeme {
+        if (string.len > 64) {
+            return error.LengthExceeded;
+        }
         return Lexeme{ .string = string };
     }
 
@@ -83,35 +108,73 @@ const Lexeme = union(enum) {
         return Lexeme{ .number = number };
     }
 
-    pub fn to_string(self: Lexeme, allocator: std.mem.Allocator) ![]const u8 {
+    pub fn build_boolean(string: []const u8) !Lexeme {
+        if (std.mem.eql(u8, string, "true")) {
+            return Lexeme{ .boolean = true };
+        } else if (std.mem.eql(u8, string, "false")) {
+            return Lexeme{ .boolean = false };
+        }
+        return error.InvalidBoolean;
+    }
+
+    pub fn format(
+        self: Lexeme,
+        comptime fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        _ = fmt;
+        _ = options;
         switch (self) {
-            Lexeme.string => return self.string,
+            Lexeme.string => {
+                try writer.print("{s}", .{self.string});
+            },
             Lexeme.number => {
-                var num = try std.fmt.allocPrint(
-                    allocator,
-                    "{d}",
-                    .{self.number},
-                );
-                if (std.mem.count(u8, num, ".") == 0) {
-                    num = try std.fmt.allocPrint(
-                        allocator,
-                        "{s}.0",
-                        .{num},
-                    );
+                if (try number_contain_dot(self.number)) {
+                    try writer.print("{d}", .{self.number});
+                } else {
+                    try writer.print("{d}.0", .{self.number});
                 }
-                return num;
+            },
+            Lexeme.boolean => {
+                try writer.print("{s}", .{if (self.boolean) "true" else "false"});
+            },
+            Lexeme.nullptr => {
+                try writer.print("nil", .{});
             },
         }
     }
 };
 
-const Token = struct {
+test "lexeme to string" {
+    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    defer buf.deinit();
+
+    var lexeme = Lexeme{ .string = "hello" };
+    try buf.writer().print("{}", .{lexeme});
+    try std.testing.expectEqualStrings("hello", buf.items);
+    buf.clearRetainingCapacity();
+
+    lexeme = Lexeme{ .number = 123.45 };
+    try buf.writer().print("{}", .{lexeme});
+    try std.testing.expectEqualStrings("123.45", buf.items);
+    buf.clearRetainingCapacity();
+
+    lexeme = try Lexeme.build_number("42");
+    try buf.writer().print("{}", .{lexeme});
+    try std.testing.expectEqualStrings("42.0", buf.items);
+}
+
+pub const Token = struct {
     token_type: TokenType,
     lexeme: ?Lexeme,
     literal: []const u8,
     line: u32,
 
-    pub fn init(token_type: TokenType, lexeme: ?Lexeme, literal: []const u8, line: u32) Token {
+    pub fn init(token_type: TokenType, lexeme: ?Lexeme, literal: []const u8, line: u32) !Token {
+        if (literal.len > 64) {
+            return error.LengthExceeded;
+        }
         return Token{
             .token_type = token_type,
             .lexeme = lexeme,
@@ -120,27 +183,50 @@ const Token = struct {
         };
     }
 
-    pub fn to_string(self: Token, allocator: std.mem.Allocator) ![]u8 {
-        return std.fmt.allocPrint(allocator, "{s} {s} {s}", .{
-            @tagName(self.token_type),
-            if (self.token_type == TokenType.STRING) try std.fmt.allocPrint(
-                allocator,
-                "\"{s}\"",
-                .{self.literal},
-            ) else self.literal,
-            if (self.lexeme) |lexeme| try lexeme.to_string(allocator) else "null",
-        });
+    pub fn format(
+        self: Token,
+        comptime fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        _ = fmt;
+        _ = options;
+        try writer.print("{} ", .{self.token_type});
+        if (self.token_type == TokenType.STRING) {
+            try writer.print("\"{s}\" ", .{self.literal});
+        } else {
+            try writer.print("{s} ", .{self.literal});
+        }
+        if (self.lexeme) |lexeme| {
+            try writer.print("{}", .{lexeme});
+        } else {
+            try writer.print("null", .{});
+        }
     }
 };
 
-const Scanner = struct {
+test "token to string" {
+    var buf = std.ArrayList(u8).init(std.testing.allocator);
+    defer buf.deinit();
+
+    var token = try Token.init(TokenType.SEMICOLON, null, ";", 1);
+    try buf.writer().print("{}", .{token});
+    try std.testing.expectEqualStrings("SEMICOLON ; null", buf.items);
+    buf.clearRetainingCapacity();
+
+    token = try Token.init(TokenType.STRING, try Lexeme.build_string("hello"), "hello", 1);
+    try buf.writer().print("{}", .{token});
+    try std.testing.expectEqualStrings("STRING \"hello\" hello", buf.items);
+}
+
+pub const Scanner = struct {
     has_error: bool = false,
     current: u32 = 0,
     start: u32 = 0,
     line: u32 = 1,
     content: []const u8,
 
-    fn init(content: []const u8) Scanner {
+    pub fn init(content: []const u8) Scanner {
         return Scanner{
             .content = content,
         };
@@ -197,9 +283,9 @@ const Scanner = struct {
             return;
         }
         _ = self.advance();
-        try tokens.append(Token.init(
+        try tokens.append(try Token.init(
             TokenType.STRING,
-            Lexeme.build_string(self.content[self.start + 1 .. self.current - 1]),
+            try Lexeme.build_string(self.content[self.start + 1 .. self.current - 1]),
             self.content[self.start + 1 .. self.current - 1],
             self.line,
         ));
@@ -216,7 +302,7 @@ const Scanner = struct {
                 _ = self.advance();
             }
         }
-        try tokens.append(Token.init(
+        try tokens.append(try Token.init(
             TokenType.NUMBER,
             try Lexeme.build_number(self.content[self.start..self.current]),
             self.content[self.start..self.current],
@@ -230,7 +316,7 @@ const Scanner = struct {
         }
         const kw = reserved_keywords.get(self.content[self.start..self.current]);
         const token_type = if (kw) |t| t else TokenType.IDENTIFIER;
-        try tokens.append(Token.init(
+        try tokens.append(try Token.init(
             token_type,
             null,
             self.content[self.start..self.current],
@@ -243,7 +329,7 @@ const Scanner = struct {
     }
 
     fn add_token(self: *Scanner, tokens: *std.ArrayList(Token), token_type: TokenType) !void {
-        try tokens.append(Token.init(
+        try tokens.append(try Token.init(
             token_type,
             null,
             self.content[self.start..self.current],
@@ -314,7 +400,7 @@ const Scanner = struct {
             self.start = self.current;
             try self.scan_token(&tokens);
         }
-        try tokens.append(Token.init(TokenType.EOF, null, "", self.line));
+        try tokens.append(try Token.init(TokenType.EOF, null, "", self.line));
         return tokens;
     }
 };
@@ -325,9 +411,7 @@ pub fn scan(content: []const u8) !void {
     defer tokens.deinit();
 
     for (tokens.items) |token| {
-        const token_str = try token.to_string(std.heap.page_allocator);
-        defer std.heap.page_allocator.free(token_str);
-        try Report.print("{s}\n", .{token_str});
+        try Report.print("{}\n", .{token});
     }
 
     if (scanner.has_error) {

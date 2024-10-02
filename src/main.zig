@@ -1,5 +1,6 @@
 const std = @import("std");
 const Scan = @import("scan.zig");
+const Parser = @import("parser.zig");
 
 pub fn main() !void {
     const args = try std.process.argsAlloc(std.heap.page_allocator);
@@ -12,12 +13,6 @@ pub fn main() !void {
 
     const command = args[1];
     const filename = args[2];
-
-    if (!std.mem.eql(u8, command, "tokenize")) {
-        std.debug.print("Unknown command: {s}\n", .{command});
-        std.process.exit(1);
-    }
-
     const file_contents = try std.fs.cwd().readFileAlloc(
         std.heap.page_allocator,
         filename,
@@ -25,9 +20,12 @@ pub fn main() !void {
     );
     defer std.heap.page_allocator.free(file_contents);
 
-    if (file_contents.len > 0) {
+    if (std.mem.eql(u8, command, "tokenize")) {
         try Scan.scan(file_contents);
+    } else if (std.mem.eql(u8, command, "parse")) {
+        try Parser.parse(file_contents);
     } else {
-        try std.io.getStdOut().writer().print("EOF  null\n", .{}); // Placeholder, remove this line when implementing the scanner
+        std.debug.print("Unknown command: {s}\n", .{command});
+        std.process.exit(1);
     }
 }

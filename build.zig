@@ -30,4 +30,11 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
+
+    // This declares the `test` step.
+    const tests = b.addTest(.{
+        .root_source_file = b.path("src/main.zig"),
+    });
+    const test_step = b.step("test", "Run the tests");
+    test_step.dependOn(&tests.step);
 }
