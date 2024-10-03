@@ -125,8 +125,12 @@ const Evaluator = struct {
         const right = try self.evaluate(expr.unary.right);
 
         switch (expr.unary.operator.token_type) {
-            .MINUS => {
-                return .{ .number = -right.number };
+            .MINUS => switch (right) {
+                .number => return .{ .number = -right.number },
+                else => {
+                    try Report.err("Operand must be a number.\n[line {}]\n", .{expr.unary.operator.line});
+                    return error.UnsupportedOperator;
+                }
             },
             .BANG => {
                 return .{ .boolean = !right.is_truth() };
@@ -199,6 +203,8 @@ pub fn evaluate(content: []const u8) !void {
 
     var evaluator = Evaluator.init(std.heap.page_allocator);
     defer evaluator.deinit();
-    const obj = try evaluator.evaluate(expr);
+    const obj = evaluator.evaluate(expr) catch {
+        std.process.exit(70);
+    };
     try Report.print("{}\n", .{obj});
 }
