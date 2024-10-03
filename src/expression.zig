@@ -90,8 +90,22 @@ pub const Literal = struct {
     ) !void {
         _ = fmt;
         _ = options;
-        if (self.token_type == Scan.TokenType.NUMBER and std.mem.count(u8, self.value, ".") == 0) {
-            try writer.print("{s}.0", .{self.value});
+        if (self.token_type == Scan.TokenType.NUMBER) {
+            const dot = std.mem.indexOf(u8, self.value, ".");
+            if (dot) |d| {
+                // remove the tailing zeros
+                var i = self.value.len - 1;
+                while (i > d + 1) : (i -= 1) {
+                    if (self.value[i] != '0') {
+                        break;
+                    }
+                }
+                try writer.print("{s}", .{self.value[0..i + 1]});
+            } else {
+                // append ".0" to the number if it doesn't have a decimal point
+                // since Lox uses double for all numbers
+                try writer.print("{s}.0", .{self.value});
+            }
             return;
         }
         try writer.print("{s}", .{self.value});
