@@ -10,5 +10,8 @@ tokenize:
 parse:
 	@zig build run -- parse test.lox
 
+eval:
+	@zig build run -- evaluate test.lox
+
 fmt:
 	@zig fmt .

@@ -1,5 +1,6 @@
 const std = @import("std");
 const Scan = @import("scan.zig");
+const Eval = @import("evaluate.zig");
 const Parser = @import("parser.zig");
 
 pub fn main() !void {
@@ -24,6 +25,8 @@ pub fn main() !void {
         try Scan.scan(file_contents);
     } else if (std.mem.eql(u8, command, "parse")) {
         try Parser.parse(file_contents);
+    } else if (std.mem.eql(u8, command, "evaluate")) {
+        try Eval.evaluate(file_contents);
     } else {
         std.debug.print("Unknown command: {s}\n", .{command});
         std.process.exit(1);

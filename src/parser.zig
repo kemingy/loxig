@@ -19,7 +19,7 @@ const EOF = Token{
     .line = 0,
 };
 
-const Parser = struct {
+pub const Parser = struct {
     tokens: []const Token,
     current: u32 = 0,
     arena: std.heap.ArenaAllocator,
@@ -176,13 +176,16 @@ const Parser = struct {
     }
 
     fn primary(self: *Parser) ParseError!*const Expr.Expression {
-        if (try self.match(&[_]TokenType{TokenType.FALSE, TokenType.TRUE, TokenType.NIL, TokenType.STRING, TokenType.NUMBER})) {
+        if (try self.match(&[_]TokenType{
+            TokenType.FALSE,
+            TokenType.TRUE,
+            TokenType.NIL,
+            TokenType.STRING,
+            TokenType.NUMBER,
+        })) {
             const token = try self.previous();
             return try self.create_expr(.{
-                .literal = Expr.Literal{
-                    .value = token.literal,
-                    .token_type = token.token_type,
-                },
+                .literal = Expr.Literal{ .lexeme = token.lexeme.? },
             });
         }
 
@@ -197,6 +200,23 @@ const Parser = struct {
         const token = self.peek();
         try Report.err("[line {d}] Error at '{s}': Expect expression\n", .{ token.line, token.literal });
         return error.UnexpectedToken;
+    }
+
+    fn synchronize(self: *Parser) ParseError!void {
+        try self.advance();
+        while (!self.is_eof()) {
+            const prev = try self.previous();
+            if (prev.token_type == TokenType.SEMICOLON) {
+                return;
+            }
+
+            const current = self.peek();
+            switch (current.token_type) {
+                TokenType.CLASS, TokenType.FUN, TokenType.VAR, TokenType.FOR, TokenType.IF, TokenType.WHILE, TokenType.PRINT, TokenType.RETURN => return,
+                else => {},
+            }
+            try self.advance();
+        }
     }
 
     pub fn parse(self: *Parser) ParseError!*const Expr.Expression {

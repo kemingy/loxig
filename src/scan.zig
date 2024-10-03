@@ -119,29 +119,23 @@ pub const Lexeme = union(enum) {
 
     pub fn format(
         self: Lexeme,
-        comptime fmt: []const u8,
-        options: std.fmt.FormatOptions,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
         writer: anytype,
     ) !void {
-        _ = fmt;
-        _ = options;
         switch (self) {
-            Lexeme.string => {
+            .string => {
                 try writer.print("{s}", .{self.string});
             },
-            Lexeme.number => {
-                if (try number_contain_dot(self.number)) {
-                    try writer.print("{d}", .{self.number});
+            .number => |num| {
+                if (try number_contain_dot(num)) {
+                    try writer.print("{d}", .{num});
                 } else {
-                    try writer.print("{d}.0", .{self.number});
+                    try writer.print("{d}.0", .{num});
                 }
             },
-            Lexeme.boolean => {
-                try writer.print("{s}", .{if (self.boolean) "true" else "false"});
-            },
-            Lexeme.nullptr => {
-                try writer.print("nil", .{});
-            },
+            // just to make the codecrafter test happy
+            else => try writer.writeAll("null"),
         }
     }
 };
@@ -185,12 +179,10 @@ pub const Token = struct {
 
     pub fn format(
         self: Token,
-        comptime fmt: []const u8,
-        options: std.fmt.FormatOptions,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
         writer: anytype,
     ) !void {
-        _ = fmt;
-        _ = options;
         try writer.print("{} ", .{self.token_type});
         if (self.token_type == TokenType.STRING) {
             try writer.print("\"{s}\" ", .{self.literal});
@@ -318,7 +310,11 @@ pub const Scanner = struct {
         const token_type = if (kw) |t| t else TokenType.IDENTIFIER;
         try tokens.append(try Token.init(
             token_type,
-            null,
+            switch (token_type) {
+                .TRUE, .FALSE => try Lexeme.build_boolean(self.content[self.start..self.current]),
+                .NIL => Lexeme.build_null(),
+                else => null,
+            },
             self.content[self.start..self.current],
             self.line,
         ));

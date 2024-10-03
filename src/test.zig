@@ -5,6 +5,7 @@ comptime {
     _ = @import("expression.zig");
     _ = @import("parser.zig");
     _ = @import("scan.zig");
+    _ = @import("evaluate.zig");
 }
 
 test {

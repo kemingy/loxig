@@ -2,6 +2,7 @@ const std = @import("std");
 const Scan = @import("scan.zig");
 
 const Token = Scan.Token;
+const Lexeme = Scan.Lexeme;
 
 // This function doesn't simplify the code. Keep it here for reference.
 pub fn define_ast(comptime attributes: anytype) type {
@@ -49,12 +50,10 @@ pub const Binary = struct {
 
     pub fn format(
         self: Binary,
-        comptime fmt: []const u8,
-        options: std.fmt.FormatOptions,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
         writer: anytype,
     ) !void {
-        _ = fmt;
-        _ = options;
         try writer.print("({s} {} {})", .{ self.operator.literal, self.left, self.right });
     }
 };
@@ -64,56 +63,52 @@ pub const Grouping = struct {
 
     pub fn format(
         self: Grouping,
-        comptime fmt: []const u8,
-        options: std.fmt.FormatOptions,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
         writer: anytype,
     ) !void {
-        _ = fmt;
-        _ = options;
         try writer.print("(group {})", .{self.expression});
     }
 };
 
 pub const Literal = struct {
-    value: []const u8,
-    token_type: Scan.TokenType,
+    lexeme: Lexeme,
 
-    pub fn init(value: []const u8, token_type: Scan.TokenType) Literal {
-        return Literal{ .value = value, .token_type = token_type };
+    pub fn init(lexeme: Lexeme) Literal {
+        return Literal{ .lexeme = lexeme };
     }
 
     pub fn format(
         self: Literal,
-        comptime fmt: []const u8,
-        options: std.fmt.FormatOptions,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
         writer: anytype,
     ) !void {
-        _ = fmt;
-        _ = options;
-        if (self.token_type == Scan.TokenType.NUMBER) {
-            const dot = std.mem.indexOf(u8, self.value, ".");
-            if (dot) |d| {
-                // remove the tailing zeros
-                var i = self.value.len - 1;
-                while (i > d + 1) : (i -= 1) {
-                    if (self.value[i] != '0') {
-                        break;
-                    }
+        // just to make the codecrafter test happy
+        // world prefer `try writer.print("{s}", .{self.lexeme});`
+        switch (self.lexeme) {
+            .string => |str| {
+                try writer.print("{s}", .{str});
+            },
+            .number => |num| {
+                if (try Scan.number_contain_dot(num)) {
+                    try writer.print("{d}", .{num});
+                } else {
+                    try writer.print("{d}.0", .{num});
                 }
-                try writer.print("{s}", .{self.value[0..i + 1]});
-            } else {
-                // append ".0" to the number if it doesn't have a decimal point
-                // since Lox uses double for all numbers
-                try writer.print("{s}.0", .{self.value});
-            }
-            return;
+            },
+            .boolean => |b| {
+                try writer.print("{s}", .{if (b) "true" else "false"});
+            },
+            .nullptr => {
+                try writer.writeAll("nil");
+            },
         }
-        try writer.print("{s}", .{self.value});
     }
 };
 
 test "literal pretty print" {
-    const literal = Literal.init("12", Scan.TokenType.NUMBER);
+    const literal = Literal.init(.{ .number = 12.0 });
     const buf = try std.fmt.allocPrint(std.testing.allocator, "{}", .{literal});
     defer std.testing.allocator.free(buf);
     try std.testing.expectEqualStrings("12.0", buf);
@@ -125,12 +120,10 @@ pub const Unary = struct {
 
     pub fn format(
         self: Unary,
-        comptime fmt: []const u8,
-        options: std.fmt.FormatOptions,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
         writer: anytype,
     ) !void {
-        _ = fmt;
-        _ = options;
         try writer.print("({s} {})", .{ self.operator.literal, self.right });
     }
 };
@@ -147,8 +140,7 @@ test "pretty print" {
                 },
                 .right = &Expression{
                     .literal = Literal{
-                        .value = "123",
-                        .token_type = Scan.TokenType.NUMBER,
+                        .lexeme = .{ .number = 123.0 },
                     },
                 },
             },
@@ -157,8 +149,7 @@ test "pretty print" {
             .grouping = Grouping{
                 .expression = &Expression{
                     .literal = Literal{
-                        .value = "45.67",
-                        .token_type = Scan.TokenType.NUMBER,
+                        .lexeme = .{ .number = 45.67 },
                     },
                 },
             },
