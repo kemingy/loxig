@@ -21,6 +21,16 @@ const Object = union(enum) {
         }
     }
 
+    pub fn try_as_number(self: Object, expr: *const Expression) !f64 {
+        switch (self) {
+            .number => return self.number,
+            else => {
+                try Report.err("Operand must be a numbers.\n[line {}]\n", .{expr.get_line()});
+                return error.UnsupportedOperator;
+            },
+        }
+    }
+
     pub fn format(
         self: Object,
         comptime _: []const u8,
@@ -125,13 +135,7 @@ const Evaluator = struct {
         const right = try self.evaluate(expr.unary.right);
 
         switch (expr.unary.operator.token_type) {
-            .MINUS => switch (right) {
-                .number => return .{ .number = -right.number },
-                else => {
-                    try Report.err("Operand must be a number.\n[line {}]\n", .{expr.unary.operator.line});
-                    return error.UnsupportedOperator;
-                }
-            },
+            .MINUS => return .{ .number = -try right.try_as_number(expr) },
             .BANG => {
                 return .{ .boolean = !right.is_truth() };
             },
@@ -146,14 +150,14 @@ const Evaluator = struct {
         const right = try self.evaluate(expr.binary.right);
 
         switch (expr.binary.operator.token_type) {
-            .MINUS => return .{ .number = left.number - right.number },
-            .SLASH => return .{ .number = left.number / right.number },
-            .STAR => return .{ .number = left.number * right.number },
+            .MINUS => return .{ .number = try left.try_as_number(expr) - try right.try_as_number(expr) },
+            .SLASH => return .{ .number = try left.try_as_number(expr) / try right.try_as_number(expr) },
+            .STAR => return .{ .number = try left.try_as_number(expr) * try right.try_as_number(expr) },
             .PLUS => return self.plus(&left, &right),
-            .GREATER => return .{ .boolean = left.number > right.number },
-            .GREATER_EQUAL => return .{ .boolean = left.number >= right.number },
-            .LESS => return .{ .boolean = left.number < right.number },
-            .LESS_EQUAL => return .{ .boolean = left.number <= right.number },
+            .GREATER => return .{ .boolean = try left.try_as_number(expr) > try right.try_as_number(expr) },
+            .GREATER_EQUAL => return .{ .boolean = try left.try_as_number(expr) >= try right.try_as_number(expr) },
+            .LESS => return .{ .boolean = try left.try_as_number(expr) < try right.try_as_number(expr) },
+            .LESS_EQUAL => return .{ .boolean = try left.try_as_number(expr) <= try right.try_as_number(expr) },
             .BANG_EQUAL => return .{ .boolean = !self.is_equal(&left, &right) },
             .EQUAL_EQUAL => return .{ .boolean = self.is_equal(&left, &right) },
             else => unreachable,
@@ -163,7 +167,7 @@ const Evaluator = struct {
     }
 };
 
-test "eval" {
+test "eval normal" {
     var evaluator = Evaluator.init(std.testing.allocator);
     defer evaluator.deinit();
 
@@ -188,6 +192,32 @@ test "eval" {
     const buf = try std.fmt.allocPrint(std.testing.allocator, "{}", .{obj});
     defer std.testing.allocator.free(buf);
     try std.testing.expectEqualStrings("15", buf);
+}
+
+test "eval abnormal" {
+    var evaluator = Evaluator.init(std.testing.allocator);
+    defer evaluator.deinit();
+
+    _ = evaluator.evaluate(&Expression{ .binary = .{
+        .left = &Expression{
+            .literal = .{
+                .lexeme = .{ .string = "hello" },
+            },
+        },
+        .right = &Expression{
+            .literal = .{
+                .lexeme = .{ .number = 3.0 },
+            },
+        },
+        .operator = .{
+            .token_type = .STAR,
+            .line = 1,
+            .literal = "*",
+            .lexeme = null,
+        },
+    } }) catch |err| {
+        try std.testing.expectEqual(err, EvalError.UnsupportedOperator);
+    };
 }
 
 pub fn evaluate(content: []const u8) !void {

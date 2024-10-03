@@ -2,7 +2,7 @@ build:
 	@zig build
 
 test:
-	@zig test src/test.zig 2>&1|cat
+	@zig test src/test.zig 2>&1 |cat
 
 tokenize:
 	@zig build run -- tokenize test.lox

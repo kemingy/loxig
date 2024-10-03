@@ -31,6 +31,16 @@ pub const Expression = union(enum) {
     literal: Literal,
     unary: Unary,
 
+    pub fn get_line(self: *const Expression) u32 {
+        switch (self.*) {
+            .binary => return self.binary.operator.line,
+            .grouping => return self.grouping.expression.get_line(),
+            .unary => return self.unary.operator.line,
+            // you won't need the line from a literal
+            .literal => unreachable,
+        }
+    }
+
     pub fn format(
         self: Expression,
         comptime fmt: []const u8,
