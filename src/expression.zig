@@ -2,7 +2,6 @@ const std = @import("std");
 const Scan = @import("scan.zig");
 
 const Token = Scan.Token;
-const Lexeme = Scan.Lexeme;
 
 // This function doesn't simplify the code. Keep it here for reference.
 pub fn define_ast(comptime attributes: anytype) type {
@@ -76,10 +75,11 @@ pub const Grouping = struct {
 };
 
 pub const Literal = struct {
-    value: Lexeme,
+    value: []const u8,
+    token_type: Scan.TokenType,
 
-    pub fn init(value: Lexeme) Literal {
-        return Literal{ .value = value };
+    pub fn init(value: []const u8, token_type: Scan.TokenType) Literal {
+        return Literal{ .value = value, .token_type = token_type };
     }
 
     pub fn format(
@@ -90,15 +90,19 @@ pub const Literal = struct {
     ) !void {
         _ = fmt;
         _ = options;
-        try writer.print("{}", .{self.value});
+        if (self.token_type == Scan.TokenType.NUMBER and std.mem.count(u8, self.value, ".") == 0) {
+            try writer.print("{s}.0", .{self.value});
+            return;
+        }
+        try writer.print("{s}", .{self.value});
     }
 };
 
 test "literal pretty print" {
-    const literal = Literal.init(try Lexeme.build_number("0.12"));
+    const literal = Literal.init("12", Scan.TokenType.NUMBER);
     const buf = try std.fmt.allocPrint(std.testing.allocator, "{}", .{literal});
     defer std.testing.allocator.free(buf);
-    try std.testing.expectEqualStrings("0.12", buf);
+    try std.testing.expectEqualStrings("12.0", buf);
 }
 
 pub const Unary = struct {
@@ -128,14 +132,20 @@ test "pretty print" {
                     .line = 1,
                 },
                 .right = &Expression{
-                    .literal = Literal{ .value = .{ .number = 123 } },
+                    .literal = Literal{
+                        .value = "123",
+                        .token_type = Scan.TokenType.NUMBER,
+                    },
                 },
             },
         },
         .right = &Expression{
             .grouping = Grouping{
                 .expression = &Expression{
-                    .literal = Literal{ .value = .{ .number = 45.67 } },
+                    .literal = Literal{
+                        .value = "45.67",
+                        .token_type = Scan.TokenType.NUMBER,
+                    },
                 },
             },
         },

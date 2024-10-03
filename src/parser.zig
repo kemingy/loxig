@@ -22,21 +22,24 @@ const EOF = Token{
 const Parser = struct {
     tokens: []const Token,
     current: u32 = 0,
-    allocator: std.heap.ArenaAllocator,
-    exprs: std.ArrayList(Expr.Expression) = undefined,
+    arena: std.heap.ArenaAllocator,
 
-    pub fn init(tokens: []const Token) Parser {
-        var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-        const allocator = arena.allocator();
+    pub fn init(tokens: []const Token, allocator: std.mem.Allocator) Parser {
+        const arena = std.heap.ArenaAllocator.init(allocator);
         return Parser{
             .tokens = tokens,
-            .allocator = arena,
-            .exprs = std.ArrayList(Expr.Expression).init(allocator),
+            .arena = arena,
         };
     }
 
     pub fn deinit(self: *Parser) void {
-        self.allocator.deinit();
+        self.arena.deinit();
+    }
+
+    fn create_expr(self: *Parser, args: anytype) ParseError!*const Expr.Expression {
+        const expr = try self.arena.allocator().create(Expr.Expression);
+        expr.* = args;
+        return expr;
     }
 
     fn check_type(self: *Parser, token_type: TokenType) bool {
@@ -94,24 +97,18 @@ const Parser = struct {
         return error.UnexpectedToken;
     }
 
-    fn get_last_expr_pointer(self: *Parser) ParseError!*const Expr.Expression {
-        if (self.exprs.items.len == 0) {
-            return error.IndexOutOfBounds;
-        }
-        return &self.exprs.items[self.exprs.items.len - 1];
-    }
-
     fn expression(self: *Parser) ParseError!*const Expr.Expression {
         var expr = try self.comparison();
         while (try self.match(&[_]TokenType{ TokenType.BANG_EQUAL, TokenType.EQUAL_EQUAL })) {
             const operator = try self.previous();
             const right = try self.comparison();
-            try self.exprs.append(Expr.Expression{ .binary = Expr.Binary{
-                .left = expr,
-                .right = right,
-                .operator = operator,
-            } });
-            expr = try self.get_last_expr_pointer();
+            expr = try self.create_expr(.{
+                .binary = Expr.Binary{
+                    .left = expr,
+                    .right = right,
+                    .operator = operator,
+                },
+            });
         }
         return expr;
     }
@@ -121,12 +118,13 @@ const Parser = struct {
         while (try self.match(&[_]TokenType{ TokenType.GREATER, TokenType.GREATER_EQUAL, TokenType.LESS, TokenType.LESS_EQUAL })) {
             const operator = try self.previous();
             const right = try self.term();
-            try self.exprs.append(Expr.Expression{ .binary = Expr.Binary{
-                .left = expr,
-                .right = right,
-                .operator = operator,
-            } });
-            expr = try self.get_last_expr_pointer();
+            expr = try self.create_expr(.{
+                .binary = Expr.Binary{
+                    .left = expr,
+                    .right = right,
+                    .operator = operator,
+                },
+            });
         }
         return expr;
     }
@@ -136,12 +134,13 @@ const Parser = struct {
         while (try self.match(&[_]TokenType{ TokenType.MINUS, TokenType.PLUS })) {
             const operator = try self.previous();
             const right = try self.factor();
-            try self.exprs.append(Expr.Expression{ .binary = Expr.Binary{
-                .left = expr,
-                .right = right,
-                .operator = operator,
-            } });
-            expr = try self.get_last_expr_pointer();
+            expr = try self.create_expr(.{
+                .binary = Expr.Binary{
+                    .left = expr,
+                    .right = right,
+                    .operator = operator,
+                },
+            });
         }
         return expr;
     }
@@ -151,12 +150,13 @@ const Parser = struct {
         while (try self.match(&[_]TokenType{ TokenType.SLASH, TokenType.STAR })) {
             const operator = try self.previous();
             const right = try self.unary();
-            try self.exprs.append(Expr.Expression{ .binary = Expr.Binary{
-                .left = expr,
-                .right = right,
-                .operator = operator,
-            } });
-            expr = try self.get_last_expr_pointer();
+            expr = try self.create_expr(.{
+                .binary = Expr.Binary{
+                    .left = expr,
+                    .right = right,
+                    .operator = operator,
+                },
+            });
         }
         return expr;
     }
@@ -165,55 +165,37 @@ const Parser = struct {
         if (try self.match(&[_]TokenType{ TokenType.BANG, TokenType.MINUS })) {
             const operator = try self.previous();
             const right = try self.unary();
-            try self.exprs.append(Expr.Expression{
-                .unary = .{
+            return try self.create_expr(.{
+                .unary = Expr.Unary{
                     .operator = operator,
                     .right = right,
                 },
             });
-            return try self.get_last_expr_pointer();
         }
         return try self.primary();
     }
 
     fn primary(self: *Parser) ParseError!*const Expr.Expression {
-        if (try self.match(&[_]TokenType{TokenType.FALSE})) {
-            try self.exprs.append(Expr.Expression{ .literal = Expr.Literal.init(Scan.Lexeme{ .boolean = false }) });
-            return try self.get_last_expr_pointer();
-        }
-        if (try self.match(&[_]TokenType{TokenType.TRUE})) {
-            try self.exprs.append(Expr.Expression{
-                .literal = Expr.Literal.init(Scan.Lexeme{ .boolean = true }),
-            });
-            return try self.get_last_expr_pointer();
-        }
-        if (try self.match(&[_]TokenType{TokenType.NIL})) {
-            try self.exprs.append(Expr.Expression{
-                .literal = Expr.Literal.init(Scan.Lexeme.build_null()),
-            });
-            return try self.get_last_expr_pointer();
-        }
-
-        if (try self.match(&[_]TokenType{ TokenType.NUMBER, TokenType.STRING })) {
+        if (try self.match(&[_]TokenType{TokenType.FALSE, TokenType.TRUE, TokenType.NIL, TokenType.STRING, TokenType.NUMBER})) {
             const token = try self.previous();
-            if (token.lexeme) |lexeme| {
-                try self.exprs.append(Expr.Expression{ .literal = Expr.Literal.init(lexeme) });
-                return try self.get_last_expr_pointer();
-            } else {
-                try Report.err("[line {}] Error: unexpected token: {s}", .{ token.line, token.literal });
-                return error.UnexpectedToken;
-            }
+            return try self.create_expr(.{
+                .literal = Expr.Literal{
+                    .value = token.literal,
+                    .token_type = token.token_type,
+                },
+            });
         }
 
         if (try self.match(&[_]TokenType{TokenType.LEFT_PAREN})) {
             const expr = try self.expression();
             try self.consume(TokenType.RIGHT_PAREN, "Expect ')' after expression.");
-            try self.exprs.append(Expr.Expression{ .grouping = Expr.Grouping{ .expression = expr } });
-            return try self.get_last_expr_pointer();
+            return try self.create_expr(.{
+                .grouping = Expr.Grouping{ .expression = expr },
+            });
         }
 
         const token = self.peek();
-        try Report.err("[line {}] Error: unexpected token {s}", .{ token.line, token.literal });
+        try Report.err("[line {}] Error: unexpected token {s}\n", .{ token.line, token.literal });
         return error.UnexpectedToken;
     }
 
@@ -224,19 +206,22 @@ const Parser = struct {
 
 test "parse expression" {
     const tokens = [_]Token{
+        try Token.init(TokenType.LEFT_PAREN, null, "(", 1),
         try Token.init(TokenType.NUMBER, .{ .number = 1.0 }, "1.0", 1),
         try Token.init(TokenType.MINUS, null, "-", 1),
         try Token.init(TokenType.NUMBER, .{ .number = 2.0 }, "2.0", 1),
+        try Token.init(TokenType.RIGHT_PAREN, null, ")", 1),
         try Token.init(TokenType.STAR, null, "*", 1),
-        try Token.init(TokenType.NUMBER, .{ .number = 3.0 }, "4.0", 1),
+        try Token.init(TokenType.MINUS, null, "-", 1),
+        try Token.init(TokenType.NUMBER, .{ .number = 3.0 }, "3.0", 1),
     };
-    var parser = Parser.init(&tokens);
+    var parser = Parser.init(&tokens, std.testing.allocator);
     defer parser.deinit();
     const expr = try parser.parse();
 
     const buf = try std.fmt.allocPrint(std.testing.allocator, "{}", .{expr});
     defer std.testing.allocator.free(buf);
-    try std.testing.expectEqualStrings("(- 1.0 (* 2.0 3.0))", buf);
+    try std.testing.expectEqualStrings("(* (group (- 1.0 2.0)) (- 3.0))", buf);
 }
 
 pub fn parse(content: []const u8) !void {
@@ -244,7 +229,8 @@ pub fn parse(content: []const u8) !void {
     var tokens = try scanner.scan(std.heap.page_allocator);
     defer tokens.deinit();
 
-    var parser = Parser.init(try tokens.toOwnedSlice());
+    var parser = Parser.init(try tokens.toOwnedSlice(), std.heap.page_allocator);
     defer parser.deinit();
-    try Report.print("{}\n", .{try parser.parse()});
+    const expr = try parser.parse();
+    try Report.print("{}\n", .{expr});
 }
