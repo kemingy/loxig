@@ -195,7 +195,7 @@ const Parser = struct {
         }
 
         const token = self.peek();
-        try Report.err("[line {}] Error: unexpected token {s}\n", .{ token.line, token.literal });
+        try Report.err("[line {d}] Error at '{s}': Expect expression\n", .{ token.line, token.literal });
         return error.UnexpectedToken;
     }
 
@@ -231,6 +231,8 @@ pub fn parse(content: []const u8) !void {
 
     var parser = Parser.init(try tokens.toOwnedSlice(), std.heap.page_allocator);
     defer parser.deinit();
-    const expr = try parser.parse();
+    const expr = parser.parse() catch {
+        std.process.exit(65);
+    };
     try Report.print("{}\n", .{expr});
 }
