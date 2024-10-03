@@ -78,25 +78,25 @@ const Evaluator = struct {
         }
     }
 
-    fn is_equal(_: *Evaluator, left: *const Object, right: *const Object) EvalError!bool {
-        switch (left.*) {
+    fn is_equal(_: *Evaluator, left: *const Object, right: *const Object) bool {
+        return switch (left.*) {
             .nil => switch (right.*) {
-                .nil => return true,
-                else => return false,
+                .nil => true,
+                else => false,
             },
             .boolean => |x| switch (right.*) {
-                .boolean => |y| return x == y,
-                else => return error.UnsupportedOperator,
+                .boolean => |y| x == y,
+                else => false,
             },
             .number => |x| switch (right.*) {
-                .number => |y| return x == y,
-                else => return error.UnsupportedOperator,
+                .number => |y| x == y,
+                else => false,
             },
             .string => |x| switch (right.*) {
-                .string => |y| return std.mem.eql(u8, x, y),
-                else => return error.UnsupportedOperator,
+                .string => |y| std.mem.eql(u8, x, y),
+                else => false,
             },
-        }
+        };
     }
 
     fn evaluate(self: *Evaluator, expr: *const Expression) EvalError!Object {
@@ -150,8 +150,8 @@ const Evaluator = struct {
             .GREATER_EQUAL => return .{ .boolean = left.number >= right.number },
             .LESS => return .{ .boolean = left.number < right.number },
             .LESS_EQUAL => return .{ .boolean = left.number <= right.number },
-            .BANG_EQUAL => return .{ .boolean = !(try self.is_equal(&left, &right)) },
-            .EQUAL_EQUAL => return .{ .boolean = try self.is_equal(&left, &right) },
+            .BANG_EQUAL => return .{ .boolean = !self.is_equal(&left, &right) },
+            .EQUAL_EQUAL => return .{ .boolean = self.is_equal(&left, &right) },
             else => unreachable,
         }
 
