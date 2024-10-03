@@ -13,5 +13,8 @@ parse:
 eval:
 	@zig build run -- evaluate test.lox
 
+run:
+	@zig build run -- run test.lox
+
 fmt:
 	@zig fmt .

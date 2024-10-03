@@ -25,6 +25,23 @@ pub fn define_ast(comptime attributes: anytype) type {
     } });
 }
 
+pub const Statement = union(enum) {
+    expression: *const Expression,
+    print: *const Expression,
+
+    pub fn format(
+        self: Statement,
+        comptime fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        switch (self) {
+            .expression => |expr| return expr.format(fmt, options, writer),
+            .print => |p| return try writer.print("print {}", .{p}),
+        }
+    }
+};
+
 pub const Expression = union(enum) {
     binary: Binary,
     grouping: Grouping,

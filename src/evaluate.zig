@@ -6,6 +6,7 @@ const Parse = @import("parser.zig");
 
 const Expression = Expr.Expression;
 const Token = Scan.Token;
+const Statement = Expr.Statement;
 
 const Object = union(enum) {
     nil: void,
@@ -107,6 +108,18 @@ const Evaluator = struct {
                 else => false,
             },
         };
+    }
+
+    pub fn interpret(self: *Evaluator, statements: std.ArrayList(Statement)) EvalError!void {
+        for (statements.items) |statement| {
+            switch (statement) {
+                .expression => |expr| _ = try self.evaluate(expr),
+                .print => |expr| {
+                    const obj = try self.evaluate(expr);
+                    try Report.print("{}\n", .{obj});
+                }
+            }
+        }
     }
 
     fn evaluate(self: *Evaluator, expr: *const Expression) EvalError!Object {
@@ -227,7 +240,7 @@ pub fn evaluate(content: []const u8) !void {
 
     var parser = Parse.Parser.init(try tokens.toOwnedSlice(), std.heap.page_allocator);
     defer parser.deinit();
-    const expr = parser.parse() catch {
+    const expr = parser.parse_expr() catch {
         std.process.exit(65);
     };
 
@@ -237,4 +250,22 @@ pub fn evaluate(content: []const u8) !void {
         std.process.exit(70);
     };
     try Report.print("{}\n", .{obj});
+}
+
+pub fn run(content: []const u8) !void {
+    var scanner = Scan.Scanner.init(content);
+    var tokens = try scanner.scan(std.heap.page_allocator);
+    defer tokens.deinit();
+
+    var parser = Parse.Parser.init(try tokens.toOwnedSlice(), std.heap.page_allocator);
+    defer parser.deinit();
+    const statements = parser.parse() catch {
+        std.process.exit(65);
+    };
+
+    var evaluator = Evaluator.init(std.heap.page_allocator);
+    defer evaluator.deinit();
+    evaluator.interpret(statements) catch {
+        std.process.exit(70);
+    };
 }

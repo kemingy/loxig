@@ -5,6 +5,7 @@ const Report = @import("report.zig");
 
 const Token = Scan.Token;
 const TokenType = Scan.TokenType;
+const Statement = Expr.Statement;
 
 pub const ParseError = error{
     UnexpectedToken,
@@ -219,8 +220,35 @@ pub const Parser = struct {
         }
     }
 
-    pub fn parse(self: *Parser) ParseError!*const Expr.Expression {
+    fn print_statement(self: *Parser) ParseError!Statement {
+        const expr = try self.expression();
+        try self.consume(TokenType.SEMICOLON, "Expect ';' after value.");
+        return Statement{ .print = expr };
+    }
+
+    fn expression_statement(self: *Parser) ParseError!Statement {
+        const expr = try self.expression();
+        try self.consume(TokenType.SEMICOLON, "Expect ';' after expression.");
+        return Statement{ .expression = expr };
+    }
+
+    fn statement(self: *Parser) ParseError!Statement {
+        if (try self.match(&[_]TokenType{TokenType.PRINT})) {
+            return try self.print_statement();
+        }
+        return try self.expression_statement();
+    }
+
+    pub fn parse_expr(self: *Parser) ParseError!*const Expr.Expression {
         return try self.expression();
+    }
+
+    pub fn parse(self: *Parser) ParseError!std.ArrayList(Statement) {
+        var statements = std.ArrayList(Statement).init(self.arena.allocator());
+        while (!self.is_eof()) {
+            try statements.append(try self.statement());
+        }
+        return statements;
     }
 };
 
@@ -234,12 +262,14 @@ test "parse expression" {
         try Token.init(TokenType.STAR, null, "*", 1),
         try Token.init(TokenType.MINUS, null, "-", 1),
         try Token.init(TokenType.NUMBER, .{ .number = 3.0 }, "3.0", 1),
+        try Token.init(TokenType.SEMICOLON, null, ";", 1),
     };
     var parser = Parser.init(&tokens, std.testing.allocator);
     defer parser.deinit();
-    const expr = try parser.parse();
+    const statements = try parser.parse();
 
-    const buf = try std.fmt.allocPrint(std.testing.allocator, "{}", .{expr});
+    try std.testing.expect(statements.items.len == 1);
+    const buf = try std.fmt.allocPrint(std.testing.allocator, "{}", .{statements.getLast()});
     defer std.testing.allocator.free(buf);
     try std.testing.expectEqualStrings("(* (group (- 1.0 2.0)) (- 3.0))", buf);
 }
@@ -251,7 +281,7 @@ pub fn parse(content: []const u8) !void {
 
     var parser = Parser.init(try tokens.toOwnedSlice(), std.heap.page_allocator);
     defer parser.deinit();
-    const expr = parser.parse() catch {
+    const expr = parser.parse_expr() catch {
         std.process.exit(65);
     };
     try Report.print("{}\n", .{expr});
