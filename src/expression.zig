@@ -47,6 +47,7 @@ pub const Statement = union(enum) {
     expression: *const Expression,
     print: *const Expression,
     varlox: VarLox,
+    block: std.ArrayList(Statement),
 
     pub fn get_expr(self: Statement) ?*const Expression {
         return switch (self) {

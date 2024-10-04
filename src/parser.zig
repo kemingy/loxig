@@ -120,8 +120,7 @@ pub const Parser = struct {
                     },
                 }),
                 else => {
-                    try Report.err("[line {d}] Error: Invalid assignment target.\n", .{ operator.line
-                    });
+                    try Report.err("[line {d}] Error: Invalid assignment target.\n", .{operator.line});
                     return error.UnexpectedToken;
                 },
             }
@@ -271,9 +270,25 @@ pub const Parser = struct {
         return Statement{ .expression = expr };
     }
 
+    fn build_block(self: *Parser) ParseError!std.ArrayList(Statement) {
+        var statements = std.ArrayList(Statement).init(self.arena.allocator());
+        while (!self.is_eof() and !self.check_type(TokenType.RIGHT_BRACE)) {
+            try statements.append(try self.declaration());
+        }
+        try self.consume(TokenType.RIGHT_BRACE, "Expect '}' after block.");
+        return statements;
+    }
+
+    fn block_statement(self: *Parser) ParseError!Statement {
+        return Statement{ .block = try self.build_block() };
+    }
+
     fn statement(self: *Parser) ParseError!Statement {
         if (try self.match_one(TokenType.PRINT)) {
             return try self.print_statement();
+        }
+        if (try self.match_one(TokenType.LEFT_BRACE)) {
+            return try self.block_statement();
         }
         return try self.expression_statement();
     }

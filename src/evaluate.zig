@@ -52,10 +52,14 @@ const Object = union(enum) {
 
 const Environment = struct {
     table: std.StringHashMap(Object),
+    enclosing: ?*Environment,
 
-    pub fn init(allocator: std.mem.Allocator) Environment {
+    pub fn init(enclosing: ?*Environment, allocator: std.mem.Allocator) Environment {
         const table = std.StringHashMap(Object).init(allocator);
-        return Environment{ .table = table };
+        return Environment{
+            .table = table,
+            .enclosing = enclosing,
+        };
     }
 
     pub fn deinit(self: *Environment) void {
@@ -71,12 +75,18 @@ const Environment = struct {
             try self.table.put(name, value);
             return;
         }
+        if (self.enclosing != null) {
+            return try self.enclosing.?.assign(name, value);
+        }
         return error.UndefinedVariable;
     }
 
-    pub fn get(self: *Environment, name: []const u8) !Object {
+    pub fn get(self: *const Environment, name: []const u8) !Object {
         if (self.table.contains(name)) {
             return self.table.get(name).?;
+        }
+        if (self.enclosing != null) {
+            return try self.enclosing.?.get(name);
         }
         return error.UndefinedVariable;
     }
@@ -94,7 +104,7 @@ const Evaluator = struct {
 
     pub fn init(allocator: std.mem.Allocator) Evaluator {
         var arena = std.heap.ArenaAllocator.init(allocator);
-        const env = Environment.init(arena.allocator());
+        const env = Environment.init(null, arena.allocator());
         return Evaluator{ .arena = arena, .env = env };
     }
 
@@ -146,19 +156,33 @@ const Evaluator = struct {
         };
     }
 
+    pub fn interpert_stmt(self: *Evaluator, statement: Statement) EvalError!void {
+        switch (statement) {
+            .expression => |expr| _ = try self.evaluate(expr),
+            .print => |expr| {
+                const obj = try self.evaluate(expr);
+                try Report.print("{}\n", .{obj});
+            },
+            .varlox => |varlox| {
+                const obj = if (varlox.initializer) |initial| try self.evaluate(initial) else Object{ .nil = {} };
+                try self.env.define(varlox.name.literal, obj);
+            },
+            .block => |block| {
+                var prev_env = self.env;
+                var local_env = Environment.init(&prev_env, self.arena.allocator());
+                defer local_env.deinit();
+                self.env = local_env;
+                for (block.items) |stmt| {
+                    try self.interpert_stmt(stmt);
+                }
+                self.env = prev_env;
+            }
+        }
+    }
+
     pub fn interpret(self: *Evaluator, statements: std.ArrayList(Statement)) EvalError!void {
         for (statements.items) |statement| {
-            switch (statement) {
-                .expression => |expr| _ = try self.evaluate(expr),
-                .print => |expr| {
-                    const obj = try self.evaluate(expr);
-                    try Report.print("{}\n", .{obj});
-                },
-                .varlox => |varlox| {
-                    const obj = if (varlox.initializer) |initial| try self.evaluate(initial) else Object{ .nil = {} };
-                    try self.env.define(varlox.name.literal, obj);
-                },
-            }
+            try self.interpert_stmt(statement);
         }
     }
 
