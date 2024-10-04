@@ -66,6 +66,14 @@ const Environment = struct {
         try self.table.put(name, value);
     }
 
+    pub fn assign(self: *Environment, name: []const u8, value: Object) !void {
+        if (self.table.contains(name)) {
+            try self.table.put(name, value);
+            return;
+        }
+        return error.UndefinedVariable;
+    }
+
     pub fn get(self: *Environment, name: []const u8) !Object {
         if (self.table.contains(name)) {
             return self.table.get(name).?;
@@ -160,8 +168,25 @@ const Evaluator = struct {
             .grouping => return try self.eval_grouping(expr),
             .literal => return try self.eval_literal(expr),
             .unary => return try self.eval_unary(expr),
-            .variable => |v| return try self.env.get(v.name.literal),
+            .variable => return try self.eval_variable(expr),
+            .assign => return try self.eval_assign(expr),
         }
+    }
+
+    fn eval_assign(self: *Evaluator, expr: *const Expression) EvalError!Object {
+        const value = try self.evaluate(expr.assign.value);
+        try self.env.assign(expr.assign.name.literal, value);
+        return value;
+    }
+
+    fn eval_variable(self: *Evaluator, expr: *const Expression) EvalError!Object {
+        return self.env.get(expr.variable.name.literal) catch |err| {
+            try Report.err("Undefined variable '{s}'\n[line {}]\n", .{
+                expr.variable.name.literal,
+                expr.get_line(),
+            });
+            return err;
+        };
     }
 
     fn eval_grouping(self: *Evaluator, expr: *const Expression) EvalError!Object {

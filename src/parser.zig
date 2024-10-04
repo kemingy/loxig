@@ -75,6 +75,15 @@ pub const Parser = struct {
         }
     }
 
+    fn match_one(self: *Parser, token_type: TokenType) ParseError!bool {
+        if (self.is_eof()) return false;
+        if (self.check_type(token_type)) {
+            try self.advance();
+            return true;
+        }
+        return false;
+    }
+
     fn match(self: *Parser, types: []const TokenType) ParseError!bool {
         if (self.is_eof()) return false;
         for (types) |token_type| {
@@ -98,18 +107,42 @@ pub const Parser = struct {
         return error.UnexpectedToken;
     }
 
+    fn assignment(self: *Parser) ParseError!*const Expr.Expression {
+        const expr = try self.equality();
+        if (try self.match_one(TokenType.EQUAL)) {
+            const operator = try self.previous();
+            const right = try self.assignment();
+            switch (expr.*) {
+                .variable => return try self.create_expr(.{
+                    .assign = Expr.Assign{
+                        .name = expr.variable.name,
+                        .value = right,
+                    },
+                }),
+                else => {
+                    try Report.err("[line {d}] Error: Invalid assignment target.\n", .{ operator.line
+                    });
+                    return error.UnexpectedToken;
+                },
+            }
+        }
+        return expr;
+    }
+
     fn expression(self: *Parser) ParseError!*const Expr.Expression {
+        return try self.assignment();
+    }
+
+    fn equality(self: *Parser) ParseError!*const Expr.Expression {
         var expr = try self.comparison();
         while (try self.match(&[_]TokenType{ TokenType.BANG_EQUAL, TokenType.EQUAL_EQUAL })) {
             const operator = try self.previous();
             const right = try self.comparison();
-            expr = try self.create_expr(.{
-                .binary = Expr.Binary{
-                    .left = expr,
-                    .right = right,
-                    .operator = operator,
-                },
-            });
+            expr = try self.create_expr(.{ .binary = Expr.Binary{
+                .left = expr,
+                .right = right,
+                .operator = operator,
+            } });
         }
         return expr;
     }
@@ -190,13 +223,13 @@ pub const Parser = struct {
             });
         }
 
-        if (try self.match(&[_]TokenType{TokenType.IDENTIFIER})) {
+        if (try self.match_one(TokenType.IDENTIFIER)) {
             return try self.create_expr(.{
                 .variable = Expr.Variable{ .name = try self.previous() },
             });
         }
 
-        if (try self.match(&[_]TokenType{TokenType.LEFT_PAREN})) {
+        if (try self.match_one(TokenType.LEFT_PAREN)) {
             const expr = try self.expression();
             try self.consume(TokenType.RIGHT_PAREN, "Expect ')' after expression.");
             return try self.create_expr(.{
@@ -239,14 +272,14 @@ pub const Parser = struct {
     }
 
     fn statement(self: *Parser) ParseError!Statement {
-        if (try self.match(&[_]TokenType{TokenType.PRINT})) {
+        if (try self.match_one(TokenType.PRINT)) {
             return try self.print_statement();
         }
         return try self.expression_statement();
     }
 
     fn var_declaration(self: *Parser) ParseError!Statement {
-        if (try self.match(&[_]TokenType{TokenType.IDENTIFIER})) {
+        if (try self.match_one(TokenType.IDENTIFIER)) {
             const name = try self.previous();
             var initializer: ?*const Expr.Expression = null;
             if (try self.match(&[_]TokenType{TokenType.EQUAL})) {
@@ -259,7 +292,7 @@ pub const Parser = struct {
     }
 
     fn declaration(self: *Parser) ParseError!Statement {
-        if (try self.match(&[_]TokenType{TokenType.VAR})) {
+        if (try self.match_one(TokenType.VAR)) {
             return self.var_declaration() catch {
                 try self.synchronize();
                 return try self.statement();
