@@ -1,0 +1,36 @@
+name: check
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    paths:
+      - '.github/workflows/check.yml'
+      - 'src/**'
+      - 'build.zig'
+      - 'build.zig.zon'
+  pull_request:
+    branches: [ "main", "master" ]
+    paths:
+      - '.github/workflows/check.yml'
+      - 'src/**'
+      - 'build.zig'
+      - 'build.zig.zon'
+  merge_group:
+
+jobs:
+  check:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: mlugg/setup-zig@v1
+      with:
+        version: 0.13.0
+    - name: format
+      run: |
+        make fmt
+        git diff --numstat --exit-code
+    - name: test
+      run: |
+        make test

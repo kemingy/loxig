@@ -176,7 +176,7 @@ const Evaluator = struct {
                     try self.interpert_stmt(stmt);
                 }
                 self.env = prev_env;
-            }
+            },
         }
     }
 
