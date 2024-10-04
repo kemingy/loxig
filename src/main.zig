@@ -29,7 +29,7 @@ pub fn main() !void {
         try Eval.evaluate(file_contents);
     } else if (std.mem.eql(u8, command, "run")) {
         try Eval.run(file_contents);
-    }else {
+    } else {
         std.debug.print("Unknown command: {s}\n", .{command});
         std.process.exit(1);
     }

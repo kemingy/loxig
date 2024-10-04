@@ -25,9 +25,36 @@ pub fn define_ast(comptime attributes: anytype) type {
     } });
 }
 
+// var for Lox
+pub const VarLox = struct {
+    name: Token,
+    initializer: ?*const Expression,
+
+    pub fn format(
+        self: VarLox,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        try writer.print("var {} = {}", .{
+            self.name.literal,
+            if (self.initializer) |init| init else "nil",
+        });
+    }
+};
+
 pub const Statement = union(enum) {
     expression: *const Expression,
     print: *const Expression,
+    varlox: VarLox,
+
+    pub fn get_expr(self: Statement) ?*const Expression {
+        return switch (self) {
+            .expression => |e| e,
+            .print => |p| p,
+            .varlox => |v| v.initializer,
+        };
+    }
 
     pub fn format(
         self: Statement,
@@ -38,6 +65,7 @@ pub const Statement = union(enum) {
         switch (self) {
             .expression => |expr| return expr.format(fmt, options, writer),
             .print => |p| return try writer.print("print {}", .{p}),
+            .varlox => |v| return v.format(fmt, options, writer),
         }
     }
 };
@@ -47,12 +75,14 @@ pub const Expression = union(enum) {
     grouping: Grouping,
     literal: Literal,
     unary: Unary,
+    variable: Variable,
 
     pub fn get_line(self: *const Expression) u32 {
         switch (self.*) {
             .binary => return self.binary.operator.line,
             .grouping => return self.grouping.expression.get_line(),
             .unary => return self.unary.operator.line,
+            .variable => return self.variable.name.line,
             // you won't need the line from a literal
             .literal => unreachable,
         }
@@ -67,6 +97,19 @@ pub const Expression = union(enum) {
         switch (self) {
             inline else => |case| try case.format(fmt, options, writer),
         }
+    }
+};
+
+pub const Variable = struct {
+    name: Token,
+
+    pub fn format(
+        self: Variable,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        try writer.print("{s}", .{self.name.literal});
     }
 };
 

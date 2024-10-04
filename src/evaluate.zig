@@ -50,20 +50,48 @@ const Object = union(enum) {
     }
 };
 
+const Environment = struct {
+    table: std.StringHashMap(Object),
+
+    pub fn init(allocator: std.mem.Allocator) Environment {
+        const table = std.StringHashMap(Object).init(allocator);
+        return Environment{ .table = table };
+    }
+
+    pub fn deinit(self: *Environment) void {
+        self.table.deinit();
+    }
+
+    pub fn define(self: *Environment, name: []const u8, value: Object) !void {
+        try self.table.put(name, value);
+    }
+
+    pub fn get(self: *Environment, name: []const u8) !Object {
+        if (self.table.contains(name)) {
+            return self.table.get(name).?;
+        }
+        return error.UndefinedVariable;
+    }
+};
+
 const EvalError = error{
-    UnsupportedOperator,
     OutOfMemory,
+    UndefinedVariable,
+    UnsupportedOperator,
 };
 
 const Evaluator = struct {
     arena: std.heap.ArenaAllocator,
+    env: Environment,
 
     pub fn init(allocator: std.mem.Allocator) Evaluator {
-        const arena = std.heap.ArenaAllocator.init(allocator);
-        return Evaluator{ .arena = arena };
+        var arena = std.heap.ArenaAllocator.init(allocator);
+        const env = Environment.init(arena.allocator());
+        return Evaluator{ .arena = arena, .env = env };
     }
 
     pub fn deinit(self: *Evaluator) void {
+        self.env.deinit();
         self.arena.deinit();
     }
 
@@ -117,7 +145,11 @@ const Evaluator = struct {
                 .print => |expr| {
                     const obj = try self.evaluate(expr);
                     try Report.print("{}\n", .{obj});
-                }
+                },
+                .varlox => |varlox| {
+                    const obj = if (varlox.initializer) |initial| try self.evaluate(initial) else Object{ .nil = {} };
+                    try self.env.define(varlox.name.literal, obj);
+                },
             }
         }
     }
@@ -128,6 +160,7 @@ const Evaluator = struct {
             .grouping => return try self.eval_grouping(expr),
             .literal => return try self.eval_literal(expr),
             .unary => return try self.eval_unary(expr),
+            .variable => |v| return try self.env.get(v.name.literal),
         }
     }
 

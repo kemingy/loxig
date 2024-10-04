@@ -190,6 +190,12 @@ pub const Parser = struct {
             });
         }
 
+        if (try self.match(&[_]TokenType{TokenType.IDENTIFIER})) {
+            return try self.create_expr(.{
+                .variable = Expr.Variable{ .name = try self.previous() },
+            });
+        }
+
         if (try self.match(&[_]TokenType{TokenType.LEFT_PAREN})) {
             const expr = try self.expression();
             try self.consume(TokenType.RIGHT_PAREN, "Expect ')' after expression.");
@@ -239,6 +245,29 @@ pub const Parser = struct {
         return try self.expression_statement();
     }
 
+    fn var_declaration(self: *Parser) ParseError!Statement {
+        if (try self.match(&[_]TokenType{TokenType.IDENTIFIER})) {
+            const name = try self.previous();
+            var initializer: ?*const Expr.Expression = null;
+            if (try self.match(&[_]TokenType{TokenType.EQUAL})) {
+                initializer = try self.expression();
+            }
+            try self.consume(TokenType.SEMICOLON, "Expect ';' after variable declaration.");
+            return Statement{ .varlox = .{ .name = name, .initializer = initializer } };
+        }
+        return error.UnexpectedToken;
+    }
+
+    fn declaration(self: *Parser) ParseError!Statement {
+        if (try self.match(&[_]TokenType{TokenType.VAR})) {
+            return self.var_declaration() catch {
+                try self.synchronize();
+                return try self.statement();
+            };
+        }
+        return try self.statement();
+    }
+
     pub fn parse_expr(self: *Parser) ParseError!*const Expr.Expression {
         return try self.expression();
     }
@@ -246,7 +275,7 @@ pub const Parser = struct {
     pub fn parse(self: *Parser) ParseError!std.ArrayList(Statement) {
         var statements = std.ArrayList(Statement).init(self.arena.allocator());
         while (!self.is_eof()) {
-            try statements.append(try self.statement());
+            try statements.append(try self.declaration());
         }
         return statements;
     }
