@@ -36,10 +36,11 @@ pub const VarLox = struct {
         _: std.fmt.FormatOptions,
         writer: anytype,
     ) !void {
-        try writer.print("var {} = {}", .{
-            self.name.literal,
-            if (self.initializer) |init| init else "nil",
-        });
+        if (self.initializer) |init| {
+            try writer.print("var {s} = {}", .{ self.name.literal, init });
+        } else {
+            try writer.print("var {s} = nil", .{self.name.literal});
+        }
     }
 };
 
@@ -67,6 +68,7 @@ pub const Statement = union(enum) {
             .expression => |expr| return expr.format(fmt, options, writer),
             .print => |p| return try writer.print("print {}", .{p}),
             .varlox => |v| return v.format(fmt, options, writer),
+            .block => |b| return try writer.print("{{ {} }}", .{b}),
         }
     }
 };
