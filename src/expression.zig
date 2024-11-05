@@ -44,17 +44,40 @@ pub const VarLox = struct {
     }
 };
 
+// if-else
+pub const IfElse = struct {
+    condition: *const Expression,
+    then_branch: *const Statement,
+    else_branch: ?*const Statement,
+
+    pub fn format(
+        self: IfElse,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        if (self.else_branch) |else_branch| {
+            try writer.print("if ({}) {} else {}", .{ self.condition, self.then_branch, else_branch });
+        } else {
+            try writer.print("if ({}) {}", .{ self.condition, self.then_branch });
+        }
+    }
+};
+
 pub const Statement = union(enum) {
     expression: *const Expression,
     print: *const Expression,
     varlox: VarLox,
-    block: std.ArrayList(Statement),
+    block: std.ArrayList(*const Statement),
+    if_else: IfElse,
 
     pub fn get_expr(self: Statement) ?*const Expression {
         return switch (self) {
             .expression => |e| e,
             .print => |p| p,
             .varlox => |v| v.initializer,
+            .if_else => |ie| ie.condition,
+            .block => null,
         };
     }
 
@@ -69,6 +92,7 @@ pub const Statement = union(enum) {
             .print => |p| return try writer.print("print {}", .{p}),
             .varlox => |v| return v.format(fmt, options, writer),
             .block => |b| return try writer.print("{{ {} }}", .{b}),
+            .if_else => |ie| return ie.format(fmt, options, writer),
         }
     }
 };

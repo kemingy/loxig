@@ -156,12 +156,19 @@ const Evaluator = struct {
         };
     }
 
-    pub fn interpert_stmt(self: *Evaluator, statement: Statement) EvalError!void {
-        switch (statement) {
+    pub fn interpert_stmt(self: *Evaluator, statement: *const Statement) EvalError!void {
+        switch (statement.*) {
             .expression => |expr| _ = try self.evaluate(expr),
             .print => |expr| {
                 const obj = try self.evaluate(expr);
                 try Report.print("{}\n", .{obj});
+            },
+            .if_else => |expr| {
+                if ((try self.evaluate(expr.condition)).is_truth()) {
+                    try self.interpert_stmt(expr.then_branch);
+                } else if (expr.else_branch != null) {
+                    try self.interpert_stmt(expr.else_branch.?);
+                }
             },
             .varlox => |varlox| {
                 const obj = if (varlox.initializer) |initial| try self.evaluate(initial) else Object{ .nil = {} };
@@ -180,7 +187,7 @@ const Evaluator = struct {
         }
     }
 
-    pub fn interpret(self: *Evaluator, statements: std.ArrayList(Statement)) EvalError!void {
+    pub fn interpret(self: *Evaluator, statements: std.ArrayList(*const Statement)) EvalError!void {
         for (statements.items) |statement| {
             try self.interpert_stmt(statement);
         }

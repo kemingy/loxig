@@ -229,8 +229,8 @@ pub const Scanner = struct {
     }
 
     fn advance(self: *Scanner) u8 {
-        self.current += 1;
-        return self.content[self.current - 1];
+        defer self.current += 1;
+        return self.content[self.current];
     }
 
     fn match(self: *Scanner, expected: u8) bool {
