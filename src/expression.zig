@@ -64,12 +64,27 @@ pub const IfElse = struct {
     }
 };
 
+pub const While = struct {
+    condition: *const Expression,
+    body: *const Statement,
+
+    pub fn format(
+        self: While,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        try writer.print("while ({}) {}", .{ self.condition, self.body });
+    }
+};
+
 pub const Statement = union(enum) {
     expression: *const Expression,
     print: *const Expression,
     varlox: VarLox,
     block: std.ArrayList(*const Statement),
     if_else: IfElse,
+    while_loop: While,
 
     pub fn get_expr(self: Statement) ?*const Expression {
         return switch (self) {
@@ -77,6 +92,7 @@ pub const Statement = union(enum) {
             .print => |p| p,
             .varlox => |v| v.initializer,
             .if_else => |ie| ie.condition,
+            .while_loop => |wl| wl.condition,
             .block => null,
         };
     }
@@ -93,6 +109,7 @@ pub const Statement = union(enum) {
             .varlox => |v| return v.format(fmt, options, writer),
             .block => |b| return try writer.print("{{ {} }}", .{b}),
             .if_else => |ie| return ie.format(fmt, options, writer),
+            .while_loop => |w| return w.format(fmt, options, writer),
         }
     }
 };

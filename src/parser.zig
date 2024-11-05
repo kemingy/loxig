@@ -341,6 +341,19 @@ pub const Parser = struct {
         return try self.create_stmt(.{ .block = try self.build_block() });
     }
 
+    fn while_statement(self: *Parser) ParseError!*const Statement {
+        try self.consume(TokenType.LEFT_PAREN, "Expect '(' after 'while'.");
+        const condition = try self.expression();
+        try self.consume(TokenType.RIGHT_PAREN, "Expect ')' after condition.");
+        const body = try self.statement();
+        return try self.create_stmt(.{
+            .while_loop = Expr.While{
+                .condition = condition,
+                .body = body,
+            },
+        });
+    }
+
     fn statement(self: *Parser) ParseError!*const Statement {
         if (try self.match_one(TokenType.PRINT)) {
             return try self.print_statement();
@@ -350,6 +363,9 @@ pub const Parser = struct {
         }
         if (try self.match_one(TokenType.LEFT_BRACE)) {
             return try self.block_statement();
+        }
+        if (try self.match_one(TokenType.WHILE)) {
+            return try self.while_statement();
         }
         return try self.expression_statement();
     }

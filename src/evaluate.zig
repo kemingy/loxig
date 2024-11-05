@@ -163,11 +163,16 @@ const Evaluator = struct {
                 const obj = try self.evaluate(expr);
                 try Report.print("{}\n", .{obj});
             },
-            .if_else => |expr| {
-                if ((try self.evaluate(expr.condition)).is_truth()) {
-                    try self.interpert_stmt(expr.then_branch);
-                } else if (expr.else_branch != null) {
-                    try self.interpert_stmt(expr.else_branch.?);
+            .if_else => |if_else| {
+                if ((try self.evaluate(if_else.condition)).is_truth()) {
+                    try self.interpert_stmt(if_else.then_branch);
+                } else if (if_else.else_branch != null) {
+                    try self.interpert_stmt(if_else.else_branch.?);
+                }
+            },
+            .while_loop => |while_loop| {
+                while ((try self.evaluate(while_loop.condition)).is_truth()) {
+                    try self.interpert_stmt(while_loop.body);
                 }
             },
             .varlox => |varlox| {
