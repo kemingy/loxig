@@ -104,6 +104,7 @@ pub const Expression = union(enum) {
     unary: Unary,
     variable: Variable,
     assign: Assign,
+    logical: Logical,
 
     pub fn get_line(self: *const Expression) u32 {
         switch (self.*) {
@@ -112,6 +113,7 @@ pub const Expression = union(enum) {
             .unary => return self.unary.operator.line,
             .variable => return self.variable.name.line,
             .assign => return self.assign.name.line,
+            .logical => return self.logical.operator.line,
             // you won't need the line from a literal
             .literal => unreachable,
         }
@@ -126,6 +128,21 @@ pub const Expression = union(enum) {
         switch (self) {
             inline else => |case| try case.format(fmt, options, writer),
         }
+    }
+};
+
+pub const Logical = struct {
+    left: *const Expression,
+    right: *const Expression,
+    operator: Token,
+
+    pub fn format(
+        self: Logical,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        try writer.print("({s} {} {})", .{ self.operator.literal, self.left, self.right });
     }
 };
 

@@ -114,8 +114,39 @@ pub const Parser = struct {
         return error.UnexpectedToken;
     }
 
+    fn logical_and(self: *Parser) ParseError!*const Expression {
+        var expr = try self.equality();
+
+        while (try self.match_one(TokenType.AND)) {
+            const op = try self.previous();
+            const right = try self.equality();
+            expr = try self.create_expr(.{ .logical = Expr.Logical{
+                .left = expr,
+                .right = right,
+                .operator = op,
+            } });
+        }
+        return expr;
+    }
+
+    fn logical_or(self: *Parser) ParseError!*const Expression {
+        var expr = try self.logical_and();
+
+        while (try self.match_one(TokenType.OR)) {
+            const op = try self.previous();
+            const right = try self.logical_and();
+            expr = try self.create_expr(.{ .logical = Expr.Logical{
+                .left = expr,
+                .right = right,
+                .operator = op,
+            } });
+        }
+        return expr;
+    }
+
     fn assignment(self: *Parser) ParseError!*const Expression {
-        const expr = try self.equality();
+        const expr = try self.logical_or();
+
         if (try self.match_one(TokenType.EQUAL)) {
             const operator = try self.previous();
             const right = try self.assignment();

@@ -201,7 +201,23 @@ const Evaluator = struct {
             .unary => return try self.eval_unary(expr),
             .variable => return try self.eval_variable(expr),
             .assign => return try self.eval_assign(expr),
+            .logical => return try self.eval_logical(expr),
         }
+    }
+
+    fn eval_logical(self: *Evaluator, expr: *const Expression) EvalError!Object {
+        const left = try self.evaluate(expr.logical.left);
+
+        if (expr.logical.operator.token_type == .OR) {
+            if (left.is_truth()) {
+                return left;
+            }
+        } else {
+            if (!left.is_truth()) {
+                return left;
+            }
+        }
+        return try self.evaluate(expr.logical.right);
     }
 
     fn eval_assign(self: *Evaluator, expr: *const Expression) EvalError!Object {
