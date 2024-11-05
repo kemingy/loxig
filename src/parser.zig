@@ -21,11 +21,10 @@ const EOF = Token{
     .line = 0,
 };
 
-pub fn combine_statements(allocator: std.mem.Allocator, stmts: [2]*const Statement) !std.ArrayList(*const Statement) {
+pub fn combine_statements(allocator: std.mem.Allocator, left: *const Statement, right: *const Statement) !std.ArrayList(*const Statement) {
     var statements = std.ArrayList(*const Statement).init(allocator);
-    for (stmts) |stmt| {
-        try statements.append(stmt);
-    }
+    try statements.append(left);
+    try statements.append(right);
     return statements;
 }
 
@@ -396,10 +395,8 @@ pub const Parser = struct {
             body = try self.create_stmt(.{
                 .block = try combine_statements(
                     self.arena.allocator(),
-                    [_]*const Statement{
-                        body,
-                        try self.create_stmt(.{ .expression = incr }),
-                    },
+                    body,
+                    try self.create_stmt(.{ .expression = incr }),
                 ),
             });
         }
@@ -414,10 +411,8 @@ pub const Parser = struct {
             body = try self.create_stmt(.{
                 .block = try combine_statements(
                     self.arena.allocator(),
-                    [_]*const Statement{
-                        i,
-                        body,
-                    },
+                    i,
+                    body,
                 ),
             });
         }
