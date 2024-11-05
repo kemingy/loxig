@@ -21,6 +21,14 @@ const EOF = Token{
     .line = 0,
 };
 
+pub fn combine_statements(allocator: std.mem.Allocator, stmts: [2]*const Statement) !std.ArrayList(*const Statement) {
+    var statements = std.ArrayList(*const Statement).init(allocator);
+    for (stmts) |stmt| {
+        try statements.append(stmt);
+    }
+    return statements;
+}
+
 pub const Parser = struct {
     tokens: []const Token,
     current: u32 = 0,
@@ -354,6 +362,69 @@ pub const Parser = struct {
         });
     }
 
+    // desugar for loop to while loop
+    fn for_statement(self: *Parser) ParseError!*const Statement {
+        try self.consume(TokenType.LEFT_PAREN, "Expect '(' after 'for'.");
+
+        var initializer: ?*const Statement = null;
+        if (try self.match_one(TokenType.SEMICOLON)) {
+            // no initializer
+        } else if (try self.match_one(TokenType.VAR)) {
+            initializer = try self.var_declaration();
+        } else {
+            initializer = try self.expression_statement();
+        }
+
+        var condition: *const Expression = undefined;
+        if (!self.check_type(TokenType.SEMICOLON)) {
+            condition = try self.expression();
+        } else {
+            condition = try self.create_expr(.{
+                .literal = Expr.Literal{ .lexeme = .{ .boolean = true } },
+            });
+        }
+        try self.consume(TokenType.SEMICOLON, "Expect ';' after loop condition.");
+
+        var increment: ?*const Expression = null;
+        if (!self.check_type(TokenType.RIGHT_PAREN)) {
+            increment = try self.expression();
+        }
+        try self.consume(TokenType.RIGHT_PAREN, "Expect ')' after for clauses.");
+
+        var body = try self.statement();
+        if (increment) |incr| {
+            body = try self.create_stmt(.{
+                .block = try combine_statements(
+                    self.arena.allocator(),
+                    [_]*const Statement{
+                        body,
+                        try self.create_stmt(.{ .expression = incr }),
+                    },
+                ),
+            });
+        }
+        body = try self.create_stmt(.{
+            .while_loop = Expr.While{
+                .condition = condition,
+                .body = body,
+            },
+        });
+
+        if (initializer) |i| {
+            body = try self.create_stmt(.{
+                .block = try combine_statements(
+                    self.arena.allocator(),
+                    [_]*const Statement{
+                        i,
+                        body,
+                    },
+                ),
+            });
+        }
+
+        return body;
+    }
+
     fn statement(self: *Parser) ParseError!*const Statement {
         if (try self.match_one(TokenType.PRINT)) {
             return try self.print_statement();
@@ -366,6 +437,9 @@ pub const Parser = struct {
         }
         if (try self.match_one(TokenType.WHILE)) {
             return try self.while_statement();
+        }
+        if (try self.match_one(TokenType.FOR)) {
+            return try self.for_statement();
         }
         return try self.expression_statement();
     }

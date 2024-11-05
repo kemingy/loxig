@@ -92,7 +92,7 @@ pub const Statement = union(enum) {
             .print => |p| p,
             .varlox => |v| v.initializer,
             .if_else => |ie| ie.condition,
-            .while_loop => |wl| wl.condition,
+            .while_loop => |w| w.condition,
             .block => null,
         };
     }
